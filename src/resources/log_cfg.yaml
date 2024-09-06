@@ -4,28 +4,22 @@ appenders:
     encoder:
       pattern: "{d} {l} {t} {m}{n}"
   file:
-    kind: file
-    path: "app.log"
+    kind: rolling_file
+    path: "logs/app.log"
     encoder:
       pattern: "{d} {l} {t} {m}{n}"
     policy:
-      kind: compound
       trigger:
         kind: size
         limit: 10mb
-      rollover:
-        kind: delete
+      roller:
+        kind: fixed_window
+        base: 1
+        pattern: "logs/app.log.{}"
         count: 5
 
 root:
-  level: info
+  level: debug
   appenders:
-    - stdout
     - file
-
-loggers:
-  paw:
-    level: debug
-    appenders:
-      - file
-      - stdout
+    - stdout

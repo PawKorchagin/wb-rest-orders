@@ -1,3 +1,5 @@
+use std::io;
+
 use axum::{
     routing::{
         get,
@@ -14,11 +16,16 @@ use serde::{
     Deserialize,
 };
 
+use log::{error as cry, debug, info};
+
 #[tokio::main]
 async fn main() {
+    init_logging();
     let app = create_routers();
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+}
+
+fn init_logging() {
+    log4rs::init_file("src/resources/log_cfg.yaml", Default::default()).unwrap()
 }
 
 fn create_routers() -> Router {
