@@ -1,4 +1,3 @@
 /target
 *.http
 logs
-stress/venv
