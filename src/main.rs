@@ -2,19 +2,13 @@
 
 use std::sync::Arc;
 
-use tokio::sync::{
-    RwLock,
-    Mutex
-};
+use tokio::sync::Mutex;
 
 use axum::{
     extract::State, 
     http::StatusCode, 
-    response::{IntoResponse, Html},
-     routing::{
-        get,
-        post,
-    }, 
+    response::IntoResponse,
+     routing::get, 
     Json, 
     Router
 };
@@ -26,11 +20,10 @@ use serde::{
 
 use serde_json::json;
 
-use tokio_postgres::{error::Error as PostgresError, types::ToSql, Client as PostgresClient, GenericClient, NoTls
+use tokio_postgres::{error::Error as PostgresError, Client as PostgresClient, GenericClient, NoTls
 };
 
 use log::{error as cry, debug, info};
-use axum_server;
 use std::collections::VecDeque;
 
 #[tokio::main]
