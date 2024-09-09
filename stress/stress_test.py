@@ -91,7 +91,7 @@ async def run_parallel_requests(num_requests):
 # Entry point to run the event loop
 max_delta = None
 def main():
-    num_requests = 10000
+    num_requests = 100000
     start_time = time.time()
     asyncio.run(run_parallel_requests(num_requests))
     end_time = time.time()

@@ -22,4 +22,4 @@ root:
   level: debug
   appenders:
     - file
-    - stdout
+    # - stdout

@@ -30,7 +30,7 @@ use std::collections::VecDeque;
 async fn main() {
     init_logging();
 
-    let state = Arc::new(AppState::new(10).await);
+    let state = Arc::new(AppState::new(5000).await);
 
     let app = Router::new()
         .merge(handle_order())
@@ -57,14 +57,10 @@ fn init_logging() {
 struct AppState {
     last_orders: Mutex<VecDeque<Order>>,
     max_capacity: usize,
-    db_client: Arc<Mutex<PostgresClient>>
+    db_client: Mutex<PostgresClient>
 }
 
-// impl ToSql for Delivery {
-//     fn to_sql() {
-        
-//     }
-// }
+type AppStateType = Arc<AppState>;
 
 impl AppState {
     async fn new(capacity: usize) -> Self {
@@ -85,34 +81,22 @@ impl AppState {
         AppState {
             last_orders: Mutex::new(VecDeque::new()),
             max_capacity: capacity,
-            db_client: Arc::new(Mutex::new(client))
+            db_client: Mutex::new(client)
         } 
     }
 
-    async fn add_order(&self, last_order: Order) -> Result<u64, PostgresError> {
-        
+    async fn add_order(&self, last_order: Order) -> Result<(), PostgresError> {
+
         let mut last_orders = self.last_orders.lock().await;
 
-        debug!("there are {} orders in queue", last_orders.len());
+        debug!("There are {} orders in queue", last_orders.len());
         
-        if last_orders.len() == self.max_capacity {
-            // save_order(&self, &last_orders.front());
-            // let order_to_save = last_orders.pop_front();
-
-            if last_orders.len() == self.max_capacity {
-                while last_orders.is_empty() {
-                    if let Some(order) = last_orders.pop_front() {
-                        // let query = "INSERT INTO orders (customer_id, delivery_service) VALUES ($1, $2)";
-                        
-                        // client.execute(query, &[&order_to_save.customer_id, &order_to_save.delivery_service]).await?;
-
-                        // let delivery_json = serde_json::to_string(&order_to_save.delivery).unwrap();
-                        // let payment_json = serde_json::to_string(&order_to_save.payment).unwrap();
-                        // let items_json = serde_json::to_string(&order_to_save.items).unwrap();
-
-
-                        let client = self.db_client.lock().await;
-                        client
+        if last_orders.len() >= self.max_capacity {
+            debug!("there are {} orders in queue, max_capacity is: {}", last_orders.len(), self.max_capacity);
+            let client = self.db_client.lock().await;
+            while !last_orders.is_empty() {
+                if let Some(order) = last_orders.pop_front() {
+                    client
                         .execute(
                             "INSERT INTO orders (order_uid, track_number, entry, locale, internal_signature, customer_id, delivery_service, shardkey, sm_id, date_created, oof_shard)
                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
@@ -123,57 +107,54 @@ impl AppState {
                             ],
                         )
                         .await?;
+            
+                    client
+                        .execute(
+                            "INSERT INTO deliveries (order_uid, name, phone, zip, city, address, region, email)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                            &[
+                                &order.order_uid, &order.delivery.name, &order.delivery.phone, &order.delivery.zip, 
+                                &order.delivery.city, &order.delivery.address, &order.delivery.region, &order.delivery.email,
+                            ],
+                        )
+                        .await?;
                 
-                        // Insert into deliveries table
+                    client
+                        .execute(
+                            "INSERT INTO payments (transaction_id, request_id, currency, provider, amount, payment_dt, bank, delivery_cost, goods_total, custom_fee)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                            ON CONFLICT(transaction_id) DO NOTHING",
+                            &[
+                                &order.payment.transaction, &order.payment.request_id, &order.payment.currency,
+                                &order.payment.provider, &order.payment.amount, &order.payment.payment_dt, 
+                                &order.payment.bank, &order.payment.delivery_cost, &order.payment.goods_total, 
+                                &order.payment.custom_fee,
+                            ],
+                        )
+                        .await?;
+                
+                    for item in &order.items {
                         client
                             .execute(
-                                "INSERT INTO deliveries (order_uid, name, phone, zip, city, address, region, email)
-                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                                "INSERT INTO items (order_uid, chrt_id, track_number, price, rid, name, sale, i_size, total_price, nm_id, brand, status)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
                                 &[
-                                    &order.order_uid, &order.delivery.name, &order.delivery.phone, &order.delivery.zip, 
-                                    &order.delivery.city, &order.delivery.address, &order.delivery.region, &order.delivery.email,
+                                    &order.order_uid, &item.chrt_id, &item.track_number, &item.price, 
+                                    &item.rid, &item.name, &item.sale, &item.size, &item.total_price, 
+                                    &item.nm_id, &item.brand, &item.status,
                                 ],
                             )
                             .await?;
-                    
-                        // Insert into payments table
-                        client
-                            .execute(
-                                "INSERT INTO payments (transaction_id, request_id, currency, provider, amount, payment_dt, bank, delivery_cost, goods_total, custom_fee)
-                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                                ON CONFLICT(transaction_id) DO NOTHING",
-                                &[
-                                    &order.payment.transaction, &order.payment.request_id, &order.payment.currency,
-                                    &order.payment.provider, &order.payment.amount, &order.payment.payment_dt, 
-                                    &order.payment.bank, &order.payment.delivery_cost, &order.payment.goods_total, 
-                                    &order.payment.custom_fee,
-                                ],
-                            )
-                            .await?;
-                    
-                        // Insert into items table (for each item in the order)
-                        for item in &order.items {
-                            client
-                                .execute(
-                                    "INSERT INTO items (order_uid, chrt_id, track_number, price, rid, name, sale, i_size, total_price, nm_id, brand, status)
-                                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
-                                    &[
-                                        &order.order_uid, &item.chrt_id, &item.track_number, &item.price, 
-                                        &item.rid, &item.name, &item.sale, &item.size, &item.total_price, 
-                                        &item.nm_id, &item.brand, &item.status,
-                                    ],
-                                )
-                                .await?;
-                        }
                     }
+                } else {
+                    cry!("last_orders.pop_front() returned None");
                 }
+                debug!("clearing orders ended, there are {} orders in queue", last_orders.len());
             }
         }
         
         last_orders.push_back(last_order);
-
-        // async fn save_order(self: &self, order: &Order) -> Result<> {
-        Ok(0)
+        Ok(())
     }
 
     // async fn get_orders(&self) -> Vec<Order> {
@@ -188,14 +169,11 @@ impl AppState {
     }
 }
 
-type AppStateType = Arc<AppState>;
-
 fn handle_order() -> Router<AppStateType> {
     async fn send_order(
         State(state): State<AppStateType>,
         Json(order): Json<Order>
     ) -> impl IntoResponse {
-        // let mut last_order = state.last_order.write().await;
         match state.add_order(order).await {
             Ok(_) => (StatusCode::OK, "Order received!").into_response(),
             Err(e) => {
@@ -203,8 +181,6 @@ fn handle_order() -> Router<AppStateType> {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save order to database").into_response()
             }
         }
-        // let pretty_json_order = serde_json::to_string_pretty(&order).unwrap();
-        // *last_order = Some(order);
     }
 
     async fn get_order(State(state): State<AppStateType>) -> impl IntoResponse {
