@@ -2,7 +2,7 @@
 
 Заказ отправляется на `http://IP:PORT/orders` и с этого же endpoint можно взять последний заказ.
 
-# DB Shema 
+# DB Schema 
 
 Таблца orders с уникальным order_uid
 
