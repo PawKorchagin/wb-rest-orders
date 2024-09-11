@@ -1,4 +1,10 @@
-// use std::{io, iter::StepBy, sync::{Arc, Mutex}};
+use clap::Parser;
+
+use std::net::{
+    SocketAddr,
+    Ipv4Addr,
+    IpAddr
+};
 
 use std::sync::Arc;
 
@@ -10,7 +16,7 @@ use axum::{
     response::IntoResponse,
      routing::get, 
     Json, 
-    Router
+    Router,
 };
 
 use serde::{
@@ -20,7 +26,10 @@ use serde::{
 
 use serde_json::json;
 
-use tokio_postgres::{error::Error as PostgresError, Client as PostgresClient, GenericClient, NoTls
+use tokio_postgres::{
+    error::Error as PostgresError, 
+    Client as PostgresClient, 
+    NoTls
 };
 
 use log::{error as cry, debug, info};
@@ -28,30 +37,42 @@ use std::collections::VecDeque;
 
 #[tokio::main]
 async fn main() {
+    //logging initialization
     init_logging();
 
-    let state = Arc::new(AppState::new(5000).await);
+    let args = CLIArgs::parse();
+
+    // Set default socket address or fetch from command line
+    let socket_addr: SocketAddr = args.addr.parse().unwrap();
+    let cache_size: usize = args.cache_size;
+
+    let state = Arc::new(AppState::new(cache_size).await);
 
     let app = Router::new()
         .merge(handle_order())
         .with_state(state);
 
-    info!("Listening on ");
+    info!("Listening on {}", args.addr);
 
-    axum_server::bind(std::net::SocketAddr::from(([127, 0, 0, 1], 3000)))
+    axum_server::bind(socket_addr)
         .serve(app.into_make_service())
         .await
         .unwrap()
+}
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct CLIArgs {
+    #[arg(short, long, default_value_t = String::from("127.0.0.1:3000"))]
+    addr: String,
+    #[arg(short, long, default_value_t = 500)]
+    cache_size: usize
 }
 
 fn init_logging() {
     log4rs::init_file("src/resources/logging/log_cfg.yaml",
         Default::default()).unwrap()
 }
-
-// fn create_routers() -> Router {
-//     Router::new().route("/order", get(get_order).post(handle_order))
-// }
 
 // #[derive(Default)]
 struct AppState {
@@ -86,7 +107,6 @@ impl AppState {
     }
 
     async fn add_order(&self, last_order: Order) -> Result<(), PostgresError> {
-
         let mut last_orders = self.last_orders.lock().await;
 
         debug!("There are {} orders in queue", last_orders.len());
@@ -157,11 +177,6 @@ impl AppState {
         Ok(())
     }
 
-    // async fn get_orders(&self) -> Vec<Order> {
-    //     let last_orders = self.last_orders.read().await;
-    //     last_orders.iter().cloned().collect()
-    // }
-
     async fn get_last_order(&self) -> Option<Order> {
         let last_orders = self.last_orders.lock().await;
 
@@ -184,20 +199,12 @@ fn handle_order() -> Router<AppStateType> {
     }
 
     async fn get_order(State(state): State<AppStateType>) -> impl IntoResponse {
-        // let last_order = state.last_order.read().await;
-        // match &*last_order {
-        //     Some(order) => Html(format!("Last order: {:?}", order)),
-        //     None => Html(format!("No order received yet"))
-        // }
-
         let pretty = match state.get_last_order().await {
             Some(order) => serde_json::to_string_pretty(&order).unwrap(),
             None => serde_json::to_string_pretty(&json!({"message": "No orders yet"})).unwrap()
         };
 
         (StatusCode::OK, pretty)
-        // Json(state.read().await.last_order.clone())
-        // "kek".into_response()
     }
     
     Router::new()

@@ -22,3 +22,4 @@ postgres-types = "0.2.7"
 postgres = "0.19.8"
 bytes = "1.7.1"
 tokio-postgres = { version = "0.7.11"}
+clap = { version = "4.0", features = ["derive"] }
