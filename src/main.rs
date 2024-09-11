@@ -1,10 +1,6 @@
 use clap::Parser;
 
-use std::net::{
-    SocketAddr,
-    Ipv4Addr,
-    IpAddr
-};
+use std::net::SocketAddr;
 
 use std::sync::Arc;
 
@@ -35,6 +31,15 @@ use tokio_postgres::{
 use log::{error as cry, debug, info};
 use std::collections::VecDeque;
 
+/// Demo service to send and get order-requests with strict JSON-body model,
+/// saves orders into runtime queue, then to DB
+/// 
+/// Listens on <SOCKET ADDR>
+/// Routes <SOCKET ADDR>/order endpoint and implements GET/POST requests
+/// 
+/// Uses arg parser to set:
+/// 1. socket address (default: 127.0.0.1:3000),
+/// 2. cache size (default: 500)
 #[tokio::main]
 async fn main() {
     //logging initialization
@@ -43,7 +48,7 @@ async fn main() {
     let args = CLIArgs::parse();
 
     // Set default socket address or fetch from command line
-    let socket_addr: SocketAddr = args.addr.parse().unwrap();
+    let socket_addr: SocketAddr = args.socket_addr.parse().unwrap();
     let cache_size: usize = args.cache_size;
 
     let state = Arc::new(AppState::new(cache_size).await);
@@ -52,7 +57,7 @@ async fn main() {
         .merge(handle_order())
         .with_state(state);
 
-    info!("Listening on {}", args.addr);
+    info!("Listening on {}", args.socket_addr);
 
     axum_server::bind(socket_addr)
         .serve(app.into_make_service())
@@ -64,7 +69,7 @@ async fn main() {
 #[command(author, version, about, long_about = None)]
 struct CLIArgs {
     #[arg(short, long, default_value_t = String::from("127.0.0.1:3000"))]
-    addr: String,
+    socket_addr: String,
     #[arg(short, long, default_value_t = 500)]
     cache_size: usize
 }
